@@ -1,7 +1,7 @@
 //! Code for parsing the WebAssembly binary format to our AST.
 //! Uses `wasmparser` crate for the actual low-level work.
 
-use std::convert::TryInto;
+use std::{convert::TryInto, sync::RwLock};
 
 use ordered_float::OrderedFloat;
 use rayon::prelude::*;
@@ -442,7 +442,7 @@ pub fn parse_module(bytes: &[u8]) -> Result<(Module, Offsets, ParseWarnings), Pa
     Ok((module, offsets, warnings))
 }
 
-fn parse_body(body: wp::FunctionBody, types: &Types) -> Result<Code, ParseError> {
+fn parse_body(body: wp::FunctionBody, types: &Types, module: &RwLock<Module>) -> Result<Code, ParseError> {
     let mut locals_reader = body.get_locals_reader()?;
     let mut offset = locals_reader.original_position();
     // Pre-allocate: There are at least as many locals as there are _unique_ local types.
@@ -490,7 +490,7 @@ fn parse_body(body: wp::FunctionBody, types: &Types) -> Result<Code, ParseError>
 
     for op_offset in body.get_operators_reader()?.into_iter_with_offsets() {
         let (op, offset) = op_offset?;
-        instrs.push(parse_instr(op, types, offset)?);
+        instrs.push(parse_instr(op, offset, types, module)?);
     }
 
     Ok(Code {
@@ -501,8 +501,9 @@ fn parse_body(body: wp::FunctionBody, types: &Types) -> Result<Code, ParseError>
 
 fn parse_instr(
     op: wp::Operator,
-    types: &Types,
     offset: usize,
+    types: &Types,
+    module: &RwLock<Module>,
 ) -> Result<Instr, ParseError> {
     use crate::Instr::*;
     use wp::Operator as wp;
@@ -510,9 +511,9 @@ fn parse_instr(
         wp::Unreachable => Unreachable,
         wp::Nop => Nop,
 
-        wp::Block { ty } => Block(parse_block_ty(ty, offset+1)?),
-        wp::Loop { ty } => Loop(parse_block_ty(ty, offset+1)?),
-        wp::If { ty } => If(parse_block_ty(ty, offset+1)?),
+        wp::Block { ty } => Block(parse_block_ty(ty, offset+1, module, types)?),
+        wp::Loop { ty } => Loop(parse_block_ty(ty, offset+1, module, types)?),
+        wp::If { ty } => If(parse_block_ty(ty, offset+1, module, types)?),
         wp::Else => Else,
         wp::End => End,
 
@@ -1160,12 +1161,15 @@ fn parse_elem_ty(ty: wp::ValType, offset: usize) -> Result<(), ParseError> {
     }
 }
 
-fn parse_block_ty(ty: wp::BlockType, offset: usize) -> Result<BlockType, ParseError> {
+fn parse_block_ty(ty: wp::BlockType, offset: usize, module: &RwLock<Module>, types: &Types) -> Result<FunctionType, ParseError> {
     use wp::BlockType::*;
     match ty {
-        Empty => Ok(BlockType(None)),
-        Type(ty) => Ok(BlockType(Some(parse_val_ty(ty, offset)?))),
-        FuncType(_) => Err(ParseIssue::unsupported(offset, WasmExtension::MultiValue))?,
+        Empty => Ok(FunctionType::empty()),
+        Type(ty) => Ok(FunctionType::new(&[], &[parse_val_ty(ty, offset)?])),
+        FuncType(type_idx) => {
+            module.write().unwrap().metadata.add_used_extension(WasmExtension::MultiValue);
+            types.get(type_idx, offset)
+        },
     }
 }
 

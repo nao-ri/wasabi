@@ -151,48 +151,12 @@ impl FromStr for ValType {
 }
 
 
-/// In the WebAssembly MVP, blocks can return either nothing or a single value.
-// TODO replace all occurrences with FunctionType once we support non-MVP binaries, then remove.
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, Ord, PartialOrd)]
-pub struct BlockType(pub Option<ValType>);
-
-#[test]
-fn block_type_is_small() {
-    assert_eq!(std::mem::size_of::<BlockType>(), 1)
-}
-
-impl FromStr for BlockType {
-    type Err = ();
-
-    fn from_str(str: &str) -> Result<Self, Self::Err> {
-        // Re-use implementation for parsing `FunctionType`s.
-        let func_ty = FunctionType::from_str(str)?;
-        match (func_ty.inputs(), func_ty.results()) {
-            ([], []) => Ok(BlockType(None)),
-            ([], [ty]) => Ok(BlockType(Some(*ty))),
-            // `BlockType` is a subset of all `FunctionType`s.
-            _ => Err(())
-        }
-    }
-}
-
-impl fmt::Display for BlockType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self.0 {
-            Some(ty) => write!(f, "[] -> [{}]", ty),
-            None => write!(f, "[] -> []"),
-        }
-    }
-}
-
-
 /// Limits for tables and memories.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct Limits {
     pub initial_size: u32,
     pub max_size: Option<u32>,
 }
-
 
 /// Type of global (scalar) variables.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
@@ -403,9 +367,17 @@ impl Module {
 
 #[derive(Debug, Clone, Default, Eq, PartialEq, Hash)]
 pub struct ModuleMetadata {
-    used_extensions: Vec<WasmExtension>,
+    pub used_extensions: Vec<WasmExtension>,
     // TODO
     // original_section_offsets: SectionOffsets
+}
+
+impl ModuleMetadata {
+    pub fn add_used_extension(&mut self, extension: WasmExtension) {
+        if !self.used_extensions.contains(&extension) {
+            self.used_extensions.push(extension);
+        }
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
@@ -577,7 +549,6 @@ pub enum SectionId {
 }
 
 
-
 /* Code. */
 
 pub type Expr = Vec<Instr>;
@@ -696,7 +667,7 @@ pub enum Instr {
     // TODO Remove, can be replaced by `Instr::Block(BlockType::Empty)`.
     Nop,
 
-    // TODO Make highlevel::Instr nesting, i.e., Block(BlockType, Vec<Instr>)
+    // TODO Make highlevel::Instr nesting, i.e., Block(FunctionType, Vec<Instr>)
     // see, e.g., the reference interpreter: https://github.com/WebAssembly/spec/blob/master/interpreter/valid/valid.ml
     // This would get rid of else and end.
     // TODO One could also remove dead code by construction, by having optional
@@ -709,9 +680,9 @@ pub enum Instr {
     // Block(FunctionType, Body), Loop(FunctionType, Body), If(FunctionType, Body, Option<Body>)
     // with
     // struct Body(Vec<Instr>, Option<TerminatorInstr>)
-    Block(BlockType),
-    Loop(BlockType),
-    If(BlockType),
+    Block(FunctionType),
+    Loop(FunctionType),
+    If(FunctionType),
     Else,
     End,
 
@@ -1594,9 +1565,9 @@ impl FromStr for Instr {
             "unreachable" => Unreachable,
             "nop" => Nop,
 
-            "block" => Block(BlockType::from_str(rest)?),
-            "loop" => Loop(BlockType::from_str(rest)?),
-            "if" => If(BlockType::from_str(rest)?),
+            "block" => Block(FunctionType::from_str(rest)?),
+            "loop" => Loop(FunctionType::from_str(rest)?),
+            "if" => If(FunctionType::from_str(rest)?),
 
             "else" => Else,
             "end" => End,

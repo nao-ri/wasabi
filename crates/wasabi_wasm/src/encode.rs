@@ -673,11 +673,12 @@ impl From<ValType> for we::ValType {
     }
 }
 
-impl From<BlockType> for we::BlockType {
-    fn from(hl_block_type: BlockType) -> Self {
-        match hl_block_type.0 {
-            Some(val_type) => we::BlockType::Result(val_type.into()),
-            None => we::BlockType::Empty,
+impl From<FunctionType> for we::BlockType {
+    fn from(func_or_block_ty: FunctionType) -> Self {
+        match (func_or_block_ty.inputs(), func_or_block_ty.results()) {
+            ([], []) => we::BlockType::Empty,
+            ([], [val_type]) =>  we::BlockType::Result(val_type.into()),
+            (inputs, results) => 
         }
     }
 }
