@@ -7,8 +7,8 @@
 name=${1%.*}
 analysis=${2%.*}
 
-emcc ${name}.c -s WASM=1 -s EXPORTED_FUNCTIONS='["_main", "_malloc", "_markSource", "_sink"]' -o ${name}.html
-
+# emcc ${name}.c -s WASM=1 -s EXPORTED_FUNCTIONS='["_main", "_malloc", "_markSource", "_sink"]' -o ${name}.html
+emcc ${name}.c -s WASM=1 -s EXPORTED_FUNCTIONS='["_main", "_malloc"]' -o ${name}.html
 rm -rf out/
 
 wasabi ${name}.wasm

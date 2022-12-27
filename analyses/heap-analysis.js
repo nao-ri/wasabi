@@ -5,7 +5,7 @@
  * TODO: work in progress
  */
 
-(function() {
+(function () {
 
     let mallocLocation;
     let mallocSize
@@ -16,7 +16,9 @@
         },
 
         call_pre(location, targetFunc, args, indirectTableIdx) {
-            if (Wasabi.module.info.functions[targetFunc].export === "_malloc") {
+            // console.log("calltest", Wasabi.module.info.functions[targetFunc].export == "malloc", Wasabi.module.info.functions[targetFunc].export, location, targetFunc, args, indirectTableIdx)//デバック用
+            if (Wasabi.module.info.functions[targetFunc].export == "malloc") {
+                console.log("malloctest", location, targetFunc, args, indirectTableIdx)//デバック用
                 mallocLocation = location;
                 mallocSize = args[0];
             }
@@ -28,7 +30,7 @@
                 mallocLocation = undefined;
             }
         },
-        
+
         load(location, op, memarg, value) {
             console.log(location, op, "value =", value, "from =", memarg);
         },
@@ -47,4 +49,3 @@
 
     };
 })();
-
